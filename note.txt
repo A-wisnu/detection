@@ -1,0 +1,18 @@
+api key gemini : AIzaSyB8iAq5YHHdEe51IIn1qC0Wum5TYDKeUKM
+
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -X POST \
+  -d '{
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "Explain how AI works in a few words"
+          }
+        ]
+      }
+    ]
+  }'
+
+buat kan aku web deteksi object dengan ai yang di tampilkan di web , dan buat realtime dengan kamera otomatis deteksi, data object wajib seluruh nya di deteksi oleh ai nya, dengan sekali pengiriman capture hanya kirim object yang belum di deteksitau baru, jika ada objecet baru muncul teks ?? dan akan di capture lalu di kirim ke ai nya buat di tebak object apa 

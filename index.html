@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Live Object Detection Stream</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Preload script utama untuk meningkatkan kinerja -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.19.0/dist/tf.min.js" as="script">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js" as="script">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-detection@1.0.0/dist/face-detection.min.js" as="script">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header class="stream-header">
+            <div class="stream-title">
+                <h1><i class="fas fa-video"></i> AI Live Detection Stream</h1>
+                <div class="stream-stats">
+                    <span id="viewers-count"><i class="fas fa-eye"></i> 128 viewers</span>
+                    <span id="live-indicator">LIVE</span>
+                </div>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <div class="stream-container">
+        <div class="camera-container">
+                    <video id="webcam" autoplay playsinline muted width="640" height="480" class="optimized"></video>
+                    <canvas id="output-canvas" width="640" height="480"></canvas>
+                    <div id="loading-message">Memuat sistem...</div>
+                    <div class="stream-overlay">
+                        <div id="stream-info"></div>
+                    </div>
+                </div>
+                
+                <div class="stream-controls">
+                    <button id="screenshot-btn" class="control-btn">
+                        <i class="fas fa-camera"></i> Tangkap Gambar
+                    </button>
+                    <button id="toggle-analysis-btn" class="control-btn">
+                        <i class="fas fa-robot"></i> AI Analysis
+                    </button>
+                    <button id="toggle-chat-btn" class="control-btn">
+                        <i class="fas fa-comments"></i> Toggle Chat
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="chat-tab">Live Chat</button>
+                    <button class="tab-btn" data-tab="objects-tab">Objek Terdeteksi</button>
+                </div>
+                
+                <div id="chat-tab" class="tab-content active">
+                    <div class="live-chat">
+                        <div id="chat-messages">
+                            <div class="chat-message system-message">
+                                <div class="message-content">
+                                    <strong>AI Assistant:</strong> Halo! Saya akan mendeskripsikan objek yang terdeteksi dalam live stream ini.
+                                </div>
+                                <div class="message-time">Baru saja</div>
+                            </div>
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="text" id="chat-input" placeholder="Tanya tentang objek terdeteksi...">
+                            <button id="send-chat-btn"><i class="fas fa-paper-plane"></i></button>
+                        </div>
+                    </div>
+        </div>
+        
+                <div id="objects-tab" class="tab-content">
+            <div class="objects-detected">
+                        <h3><i class="fas fa-cube"></i> Objek Terdeteksi</h3>
+                <ul id="detected-objects-list"></ul>
+            </div>
+            
+                <div id="new-object-indicator" class="hidden">
+                    <h3>Objek Baru Terdeteksi: <span id="new-object-label">??</span></h3>
+                    <div id="new-object-image-container">
+                        <img id="new-object-image" src="" alt="Objek Baru">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load TensorFlow.js dan model-model AI -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.19.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-detection@1.0.0/dist/face-detection.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0/dist/body-pix.min.js"></script>
+    
+    <!-- Load script aplikasi -->
+    <script src="app.js" defer></script>
+</body>
+</html> 
