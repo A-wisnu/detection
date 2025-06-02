@@ -600,64 +600,14 @@ async function loadModels() {
             throw new Error('Library COCO-SSD tidak tersedia, pastikan script TensorFlow.js dan COCO-SSD dimuat dengan benar');
         }
         
-        // Gunakan model paling ringan untuk performa lebih baik
+        // Matikan debug mode untuk performa lebih baik
+        if (typeof tf !== 'undefined' && tf.env) {
+            tf.env().set('DEBUG', false);
+        }
+        
+        // Gunakan model terkecil dan tercepat
         try {
-            // Konfigurasi TensorFlow untuk performa optimal
-            if (typeof tf !== 'undefined') {
-                // Matikan debug untuk performa
-                tf.env().set('DEBUG', false);
-                
-                // Konfigurasi memori untuk mencegah memory leak
-                tf.env().set('WEBGL_DELETE_TEXTURE_THRESHOLD', 0);
-                tf.env().set('WEBGL_FORCE_F16_TEXTURES', true);
-                
-                console.log('Mengoptimalkan pengaturan TensorFlow.js...');
-                
-                // Coba gunakan WebGL untuk akselerasi hardware
-                try {
-                    await tf.setBackend('webgl');
-                    console.log('Menggunakan backend WebGL untuk akselerasi GPU');
-                    
-                    // Optimalkan pengaturan WebGL lebih lanjut
-                    if (tf.getBackend() === 'webgl') {
-                        // Batasi penggunaan memori GPU
-                        const webGLBackend = tf.backend();
-                        if (webGLBackend && webGLBackend.gpgpu) {
-                            try {
-                                // Optimalkan data mover
-                                webGLBackend.setDataMover({
-                                    isDataMoverAsync: false,
-                                    moveData: (src, dst) => dst.set(src)
-                                });
-                                
-                                // Batasi texture cache untuk mencegah memory leak
-                                if (webGLBackend.numBytesInGPU) {
-                                    console.log(`Memori GPU awal: ${(webGLBackend.numBytesInGPU() / (1024 * 1024)).toFixed(2)} MB`);
-                                }
-                                
-                                // Aktifkan garbage collection agresif
-                                tf.tidy(() => {
-                                    console.log('Membersihkan memori TensorFlow');
-                                });
-                            } catch (e) {
-                                console.warn('Gagal mengoptimalkan WebGL backend:', e);
-                            }
-                        }
-                    }
-                } catch (backendError) {
-                    console.warn('Gagal menggunakan WebGL backend, menggunakan fallback:', backendError);
-                    // Fallback ke backend lain jika WebGL gagal
-                    try {
-                        await tf.setBackend('cpu');
-                        console.log('Menggunakan CPU backend sebagai fallback');
-                    } catch (e) {
-                        console.warn('Gagal mengatur backend apapun:', e);
-                    }
-                }
-            }
-            
-            // Gunakan model terkecil dan tercepat - lite_mobilenet_v2
-            console.log('Memuat model lite_mobilenet_v2 untuk performa optimal...');
+            console.log('Memuat model lite_mobilenet_v2...');
             objectDetectionModel = await cocoSsd.load({
                 base: 'lite_mobilenet_v2'
             });
@@ -734,18 +684,8 @@ async function detectObjects() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Deteksi objek menggunakan tensor.js tidy untuk pengelolaan memori
-        let predictions = [];
-        
-        // Bungkus deteksi dalam tf.tidy untuk membersihkan memori tensor setelah selesai
-        if (typeof tf !== 'undefined' && tf.tidy) {
-            predictions = await tf.tidy(() => {
-                return objectDetectionModel.detect(video);
-            });
-        } else {
-            // Fallback jika tf.tidy tidak tersedia
-            predictions = await objectDetectionModel.detect(video);
-        }
+        // Deteksi objek langsung tanpa menggunakan tf.tidy
+        const predictions = await objectDetectionModel.detect(video);
         
         // Filter prediksi objek berdasarkan ambang batas keyakinan
         const validPredictions = predictions.filter(pred => pred.score >= CONFIDENCE_THRESHOLD);
@@ -760,11 +700,6 @@ async function detectObjects() {
             if (streamInfo.parentElement) {
                 streamInfo.parentElement.style.display = 'none';
             }
-        }
-        
-        // Bersihkan memori setelah selesai deteksi
-        if (typeof tf !== 'undefined' && tf.disposeVariables) {
-            tf.disposeVariables();
         }
     } catch (error) {
         console.error('Error deteksi objek:', error);
@@ -1268,202 +1203,4 @@ PENTING:
                 if (item.dataset.className === className) {
                     const objectNameSpan = item.querySelector('.object-name');
                     if (objectNameSpan) {
-                        objectNameSpan.textContent = `Objek ${index + 1} (menganalisis...)`;
-                    }
-                }
-            });
-        });
-        
-        // Kirim ke API dengan timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 detik timeout untuk batch
-        
-        console.log('Mengirim data batch ke API Gemini...');
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestData),
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Respons batch API Gemini:', data);
-        
-        // Proses respons API
-        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-            let aiDescription = data.candidates[0].content.parts[0].text;
-            
-            // Proses deskripsi untuk setiap objek
-            const objectRegex = /Objek (\d+):\s*([^\n]+)/g;
-            let match;
-            const objectDescriptionsFromAPI = new Map();
-            
-            while ((match = objectRegex.exec(aiDescription)) !== null) {
-                const objectNumber = parseInt(match[1]);
-                const description = match[2].trim();
-                objectDescriptionsFromAPI.set(objectNumber, description);
-            }
-            
-            // Update deskripsi untuk setiap objek
-            predictions.forEach((prediction, index) => {
-                const objectNumber = index + 1;
-                const { class: className, score, bbox } = prediction;
-                
-                // Dapatkan deskripsi dari API hasil
-                let objDescription = objectDescriptionsFromAPI.get(objectNumber);
-                
-                // Jika tidak ada deskripsi spesifik, gunakan deskripsi umum
-                if (!objDescription) {
-                    objDescription = `Objek terdeteksi dalam frame`;
-                }
-                
-                // Simpan deskripsi
-                lastDetectedClass = className;
-                objectDescriptions.set(className, {
-                    description: objDescription,
-                    time: new Date().toISOString(),
-                    bbox: bbox,
-                    score: score
-                });
-                
-                // Update UI
-                const objectItems = detectedObjectsList.querySelectorAll('li');
-                objectItems.forEach(item => {
-                    if (item.dataset.className === className) {
-                        const objectNameSpan = item.querySelector('.object-name');
-                        if (objectNameSpan) {
-                            objectNameSpan.textContent = objDescription.substring(0, 30) + 
-                                                         (objDescription.length > 30 ? '...' : '');
-                        }
-                    }
-                });
-            });
-            
-            // Tampilkan hasil analisis batch
-            addAIMessage(aiDescription);
-            
-            // Update indikator objek terakhir
-            if (predictions.length > 0) {
-                const lastPrediction = predictions[predictions.length - 1];
-                showNewObjectDetection({
-                    ...lastPrediction,
-                    class: objectDescriptionsFromAPI.get(predictions.length) || "Objek Teranalisis"
-                }, false);
-            }
-            
-            console.log('Analisis batch berhasil');
-        }
-    } catch (error) {
-        console.error('Error mengirim batch ke Gemini API:', error);
-        
-        // Jika gagal batch, coba satu per satu
-        console.log('Mencoba memproses objek satu per satu...');
-        
-        // Tandai objek sebagai terdeteksi meskipun ada error
-        for (const prediction of predictions) {
-            const { class: className, bbox, score } = prediction;
-            if (!objectDescriptions.has(className)) {
-                objectDescriptions.set(className, {
-                    description: "Objek terdeteksi tetapi tidak dapat dianalisis. Coba arahkan kamera dengan lebih jelas.",
-                    time: new Date().toISOString(),
-                    bbox: bbox,
-                    score: score
-                });
-            }
-        }
-        
-        // Coba proses satu per satu
-        try {
-            const promises = predictions.map(obj => sendToGeminiAPI(obj));
-            await Promise.all(promises);
-        } catch (innerError) {
-            console.error('Gagal memproses objek satu per satu:', innerError);
-        }
-    }
-}
-
-// Inisialisasi aplikasi
-async function initApp() {
-    try {
-        console.log('Memulai inisialisasi aplikasi...');
-        
-        // Pastikan TensorFlow.js dan COCO-SSD tersedia
-        if (typeof tf === 'undefined' || typeof cocoSsd === 'undefined') {
-            loadingMessage.textContent = 'Error: Library TensorFlow.js atau COCO-SSD tidak tersedia. Periksa koneksi internet dan refresh halaman.';
-            return;
-        }
-        
-        // Cek apakah browser mendukung getUserMedia
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            loadingMessage.textContent = 'Error: Browser Anda tidak mendukung akses kamera. Gunakan browser modern seperti Chrome, Firefox, atau Edge terbaru.';
-            return;
-        }
-        
-        // Pastikan semua elemen DOM tersedia
-        ensureDOMElementsExist();
-        
-        // Inisialisasi UI
-        initTabs();
-        initControls();
-        
-        // Setup kamera (tanpa pesan selamat datang)
-        loadingMessage.textContent = 'Menyiapkan kamera...';
-        console.log('Menyiapkan kamera...');
-    await setupCamera();
-    
-        // Muat model deteksi objek
-        loadingMessage.textContent = 'Memuat model AI...';
-        console.log('Memuat model deteksi objek...');
-        await loadModels();
-        
-        // Aktifkan GPU acceleration jika tersedia
-        try {
-            if (tf && tf.setBackend) {
-                const backend = tf.getBackend();
-                console.log(`TensorFlow.js menggunakan backend: ${backend}`);
-                
-                if (backend !== 'webgl') {
-                    try {
-                        await tf.setBackend('webgl');
-                        console.log('Berhasil mengaktifkan backend WebGL untuk akselerasi GPU');
-                    } catch (backendError) {
-                        console.warn('Tidak dapat menggunakan WebGL backend:', backendError);
-                    }
-                }
-            }
-        } catch (tfError) {
-            console.warn('Error saat mengonfigurasi TensorFlow backend:', tfError);
-        }
-    
-    // Mulai deteksi
-        loadingMessage.textContent = 'Memulai deteksi objek...';
-        console.log('Memulai deteksi objek...');
-    detectObjects();
-        
-        // Sembunyikan loading message
-        if (loadingMessage) {
-            loadingMessage.style.display = 'none';
-        }
-        
-        // Tampilkan pesan selamat datang di chat
-        addAIMessage("Aplikasi deteksi objek siap digunakan. Arahkan kamera ke objek untuk mendeteksi dan menganalisisnya.");
-        
-        console.log('Aplikasi berhasil diinisialisasi!');
-    } catch (error) {
-        console.error('Gagal menginisialisasi aplikasi:', error);
-        if (loadingMessage) {
-            loadingMessage.textContent = `Gagal inisialisasi: ${error.message}. Refresh halaman atau periksa konsol untuk detail.`;
-        }
-    }
-}
-
-// Mulai aplikasi setelah DOM dimuat sepenuhnya
-document.addEventListener('DOMContentLoaded', initApp); 
+                        objectNameSpan.textContent = `
